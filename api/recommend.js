@@ -7,7 +7,8 @@ const PRODUCTS = [
     category: "Smartphone",
     price: 449,
     rating: 4.6,
-    description: "Fast 5G smartphone with a bright OLED display and all-day battery.",
+    description:
+      "Fast 5G smartphone with a bright OLED display and all-day battery.",
     features: ["5G", "OLED display", "128GB", "5000mAh battery"]
   },
   {
@@ -16,7 +17,8 @@ const PRODUCTS = [
     category: "Smartphone",
     price: 699,
     rating: 4.8,
-    description: "Premium camera phone with a powerful processor and excellent display.",
+    description:
+      "Premium camera phone with a powerful processor and excellent display.",
     features: ["5G", "50MP camera", "256GB", "120Hz display"]
   },
   {
@@ -25,7 +27,8 @@ const PRODUCTS = [
     category: "Headphones",
     price: 129,
     rating: 4.5,
-    description: "Comfortable wireless headphones with active noise cancellation.",
+    description:
+      "Comfortable wireless headphones with active noise cancellation.",
     features: ["ANC", "Bluetooth 5.3", "30-hour battery", "Fast charging"]
   },
   {
@@ -34,7 +37,8 @@ const PRODUCTS = [
     category: "Headphones",
     price: 249,
     rating: 4.7,
-    description: "Studio-style headphones with rich sound and premium comfort.",
+    description:
+      "Studio-style headphones with rich sound and premium comfort.",
     features: ["Hi-Fi audio", "ANC", "40-hour battery", "Multipoint"]
   },
   {
@@ -43,7 +47,8 @@ const PRODUCTS = [
     category: "Smartwatch",
     price: 179,
     rating: 4.4,
-    description: "Fitness smartwatch with health tracking and a vibrant AMOLED screen.",
+    description:
+      "Fitness smartwatch with health tracking and a vibrant AMOLED screen.",
     features: ["Heart rate", "GPS", "AMOLED", "7-day battery"]
   },
   {
@@ -52,7 +57,8 @@ const PRODUCTS = [
     category: "Laptop",
     price: 799,
     rating: 4.7,
-    description: "Slim laptop for coding, study and everyday productivity.",
+    description:
+      "Slim laptop for coding, study and everyday productivity.",
     features: ["16GB RAM", "512GB SSD", "14-inch display", "Wi-Fi 6"]
   },
   {
@@ -61,7 +67,8 @@ const PRODUCTS = [
     category: "Laptop",
     price: 999,
     rating: 4.8,
-    description: "Performance laptop designed for gaming, development and creative work.",
+    description:
+      "Performance laptop designed for gaming, development and creative work.",
     features: ["16GB RAM", "1TB SSD", "RTX graphics", "144Hz display"]
   },
   {
@@ -70,12 +77,14 @@ const PRODUCTS = [
     category: "Tablet",
     price: 329,
     rating: 4.5,
-    description: "Lightweight tablet for streaming, reading and productivity.",
+    description:
+      "Lightweight tablet for streaming, reading and productivity.",
     features: ["11-inch display", "128GB", "Stylus support", "8000mAh"]
   }
 ];
 
 export default async function handler(req, res) {
+  // Only allow POST requests
   if (req.method !== "POST") {
     return res.status(405).json({
       error: "Method not allowed"
@@ -85,44 +94,55 @@ export default async function handler(req, res) {
   try {
     const { preferences } = req.body || {};
 
+    // Validate user input
     if (!preferences || preferences.trim().length < 3) {
       return res.status(400).json({
         error: "Please enter your product preferences."
       });
     }
 
+    // Check API key
     if (!process.env.OPENAI_API_KEY) {
       return res.status(500).json({
         error: "OPENAI_API_KEY is not configured."
       });
     }
 
+    // Create OpenAI client
     const client = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY
     });
 
+    // Send user's preference and product catalog to AI
     const response = await client.responses.create({
       model: process.env.OPENAI_MODEL || "gpt-5",
 
       input: `
-You are a product recommendation assistant.
+You are an AI product recommendation assistant.
 
-The user will describe what they want.
+The user will describe what product they want.
 
-Choose ONLY products from the catalog.
+Your job is to recommend ONLY products from the provided catalog.
 
-Return ONLY JSON in exactly this format:
+Return ONLY valid JSON.
+
+Use exactly this format:
 
 {
   "recommendedIds": [1, 3],
-  "summary": "Short explanation"
+  "summary": "These products match the user's requirements."
 }
 
-Do not include markdown.
-Do not include any other fields.
-Choose maximum 3 products.
+Rules:
+- recommendedIds must contain product IDs from the catalog.
+- Return maximum 3 products.
+- Do not invent products.
+- Consider price, category, features and user requirements.
+- Keep summary short.
+- Do not include markdown.
+- Do not include any text outside the JSON.
 
-USER REQUEST:
+USER PREFERENCE:
 ${preferences}
 
 PRODUCT CATALOG:
@@ -130,25 +150,28 @@ ${JSON.stringify(PRODUCTS)}
 `
     });
 
-    const text = response.output_text.trim();
+    console.log("OpenAI response:", response.output_text);
 
-    console.log("AI RESPONSE:", text);
-
+    // Convert AI response from JSON string to JavaScript object
     let result;
 
     try {
-      result = JSON.parse(text);
-    } catch (error) {
+      result = JSON.parse(response.output_text);
+    } catch (parseError) {
+      console.error("JSON parsing error:", parseError);
+
       return res.status(500).json({
-        error: "AI returned an invalid JSON response."
+        error: "AI returned an invalid response."
       });
     }
 
-    const ids = Array.isArray(result.recommendedIds)
+    // Get recommended IDs
+    const recommendedIds = Array.isArray(result.recommendedIds)
       ? result.recommendedIds
       : [];
 
-    const recommendations = ids
+    // Find products from our catalog
+    const recommendations = recommendedIds
       .filter((id) =>
         PRODUCTS.some((product) => product.id === id)
       )
@@ -166,8 +189,9 @@ ${JSON.stringify(PRODUCTS)}
         };
       });
 
+    // Send response back to React
     return res.status(200).json({
-      recommendations,
+      recommendations: recommendations,
       summary:
         result.summary ||
         "These products best match your preferences.",
@@ -175,7 +199,7 @@ ${JSON.stringify(PRODUCTS)}
     });
 
   } catch (error) {
-    console.error("OPENAI ERROR:", error);
+    console.error("OpenAI API error:", error);
 
     return res.status(500).json({
       error:
