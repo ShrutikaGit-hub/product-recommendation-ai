@@ -101,54 +101,46 @@ export default async function handler(req, res) {
       apiKey: process.env.OPENAI_API_KEY
     });
 
-    const catalog = JSON.stringify(PRODUCTS);
-
     const response = await client.responses.create({
       model: process.env.OPENAI_MODEL || "gpt-5",
 
       input: `
-You are an AI product recommendation assistant.
+You are a product recommendation assistant.
 
-The user will describe what type of product they want.
+The user will describe what they want.
 
-Recommend ONLY products from the catalog below.
+Choose ONLY products from the catalog.
 
-Return ONLY valid JSON.
-Do not use markdown.
-Do not add any text outside the JSON.
-
-The JSON must have this format:
+Return ONLY JSON in exactly this format:
 
 {
   "recommendedIds": [1, 3],
-  "summary": "Short explanation of why these products match."
+  "summary": "Short explanation"
 }
 
-Return a maximum of 3 product IDs.
+Do not include markdown.
+Do not include any other fields.
+Choose maximum 3 products.
 
-USER PREFERENCE:
+USER REQUEST:
 ${preferences}
 
 PRODUCT CATALOG:
-${catalog}
-      `,
-
-      text: {
-        format: {
-          type: "json_object"
-        }
-      }
+${JSON.stringify(PRODUCTS)}
+`
     });
+
+    const text = response.output_text.trim();
+
+    console.log("AI RESPONSE:", text);
 
     let result;
 
     try {
-      result = JSON.parse(response.output_text);
-    } catch (parseError) {
-      console.error("JSON parsing error:", parseError);
-
+      result = JSON.parse(text);
+    } catch (error) {
       return res.status(500).json({
-        error: "AI returned an invalid response."
+        error: "AI returned an invalid JSON response."
       });
     }
 
@@ -183,7 +175,7 @@ ${catalog}
     });
 
   } catch (error) {
-    console.error("Recommendation API error:", error);
+    console.error("OPENAI ERROR:", error);
 
     return res.status(500).json({
       error:
